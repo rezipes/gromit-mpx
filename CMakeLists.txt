@@ -5,6 +5,15 @@ include(CPack)
 
 set(target_name gromit-mpx)
 set(LOCALE_DOMAIN ${CMAKE_PROJECT_NAME})
+
+# Site customization: bundle runtime shared library dependencies into the
+# install tree (see install(CODE ...) block below) so the rez package is
+# self-contained and doesn't require gtk3/libXi/appindicator/lz4 to be
+# preinstalled on every machine that runs it.
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(CMAKE_GENERATOR MATCHES "Unix Makefiles|Ninja")
 # some LSP servers expect compile_commands.json in the project root
@@ -90,6 +99,43 @@ GETTEXT_PROCESS_PO_FILES(zh_HK ALL PO_FILES po/zh_HK.po)
 GETTEXT_PROCESS_PO_FILES(zh_SG ALL PO_FILES po/zh_SG.po)
 
 install(TARGETS ${target_name} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# Site customization: bundle the non-base-OS shared library dependencies of
+# gromit-mpx (gtk3, appindicator, lz4, etc.) into the install tree, so the
+# rez package works on machines that don't have those -devel/runtime
+# packages installed. Base glibc/loader libs are excluded since bundling
+# those is an ABI hazard and they are guaranteed present on any Linux host.
+install(CODE "
+    set(_exclude_regexes
+        \"^/lib.*/ld-linux.*\\\\.so.*\"
+        \".*/libc\\\\.so.*\"
+        \".*/libm\\\\.so.*\"
+        \".*/libpthread\\\\.so.*\"
+        \".*/libdl\\\\.so.*\"
+        \".*/librt\\\\.so.*\"
+        \".*/libresolv\\\\.so.*\"
+        \".*/libnsl\\\\.so.*\"
+        \".*/libutil\\\\.so.*\"
+        \".*/libcrypt\\\\.so.*\"
+        \".*/libanl\\\\.so.*\"
+    )
+    file(GET_RUNTIME_DEPENDENCIES
+        EXECUTABLES \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/${target_name}\"
+        RESOLVED_DEPENDENCIES_VAR _resolved_deps
+        UNRESOLVED_DEPENDENCIES_VAR _unresolved_deps
+        POST_EXCLUDE_REGEXES \${_exclude_regexes}
+    )
+    if(_unresolved_deps)
+        message(WARNING \"Could not resolve runtime dependencies for bundling: \${_unresolved_deps}\")
+    endif()
+    file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}\")
+    foreach(_dep IN LISTS _resolved_deps)
+        file(INSTALL \"\${_dep}\"
+            DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}\"
+            FOLLOW_SYMLINK_CHAIN
+        )
+    endforeach()
+" COMPONENT Runtime)
 install(FILES data/net.christianbeier.Gromit-MPX.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES data/gromit-mpx.cfg DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/gromit-mpx)
 install(FILES README.md AUTHORS ChangeLog NEWS.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
