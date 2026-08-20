@@ -10,8 +10,8 @@ private_build_requires = [
     ]
 
 with scope("config") as config:
-    config.release_packages_path = "/s/apps/packages/utils"
-    
+    config.release_packages_path = "/s/apps/packages/cg"
+
 def commands():
     env.XDG_CONFIG_HOME.append('{root}/etc/gromit-mpx')
     env.XDG_DATA_DIRS.append('{root}/share')
